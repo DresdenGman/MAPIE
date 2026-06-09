@@ -309,6 +309,68 @@ def test_ece_scores() -> None:
     assert np.round(scr, 4) == 0.5363
 
 
+def test_ece_classwise_false_unchanged() -> None:
+    """
+    Test that the default behavior is unchanged and that
+    classwise=False gives the same result as the default.
+    """
+    assert expected_calibration_error(
+        y_true, y_scores, classwise=False
+    ) == expected_calibration_error(y_true, y_scores)
+
+
+def test_ece_classwise_toydata() -> None:
+    """
+    Test the classwise ECE on a hand-computable toy example.
+
+    With num_bins=2 and the uniform strategy, all the scores fall in
+    the same bin, hence for each class the ECE reduces to the absolute
+    difference between the mean predicted probability and the empirical
+    frequency of the class:
+    - class 0: |mean([0.9, 0.8, 0.3, 0.4]) - 0.5| = 0.1
+    - class 1: |mean([0.1, 0.2, 0.7, 0.6]) - 0.5| = 0.1
+    The classwise ECE is the average over the classes, i.e. 0.1.
+    """
+    y_true_ = np.array([0, 1, 1, 0])
+    y_scores_ = np.array([[0.9, 0.1], [0.8, 0.2], [0.3, 0.7], [0.4, 0.6]])
+    scr = expected_calibration_error(y_true_, y_scores_, num_bins=2, classwise=True)
+    np.testing.assert_allclose(scr, 0.1)
+
+
+def test_ece_classwise_perfectly_calibrated() -> None:
+    """
+    Test that the classwise ECE of perfectly calibrated
+    probabilities is zero.
+
+    In the bin of probability 0.75, the class is observed 3 times
+    out of 4, and in the bin of probability 0.25, the class is
+    observed 1 time out of 4.
+    """
+    y_true_ = np.array([0, 0, 0, 1, 1, 1, 1, 0])
+    y_scores_ = np.array(
+        [
+            [0.75, 0.25],
+            [0.75, 0.25],
+            [0.75, 0.25],
+            [0.75, 0.25],
+            [0.25, 0.75],
+            [0.25, 0.75],
+            [0.25, 0.75],
+            [0.25, 0.75],
+        ]
+    )
+    scr = expected_calibration_error(y_true_, y_scores_, num_bins=3, classwise=True)
+    np.testing.assert_allclose(scr, 0.0)
+
+
+def test_ece_classwise_1d_scores_raises() -> None:
+    """
+    Test that classwise=True with 1D y_scores raises a ValueError.
+    """
+    with pytest.raises(ValueError, match=r".*2D array.*classwise=True.*"):
+        expected_calibration_error(y_true, y_score, classwise=True)
+
+
 def test_top_label_ece() -> None:
     """Test that score is"""
     scr = top_label_ece(y_true, y_scores)

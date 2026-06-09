@@ -1,5 +1,8 @@
 # History
 
+## 1.x.x (2026-xx-xx)
+* Add a `classwise` argument to `expected_calibration_error` to compute the classwise-ECE (Kull et al., 2019) instead of the default (confidence-)ECE (Naeini et al., 2015); also clarify in the docstring that, in the default setting, `y_true` is a binary indicator of prediction correctness (`y == y_pred`), not the target values. (issue #277)
+
 ## 1.4.1 (2026-06-08)
 
 ### Features
