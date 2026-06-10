@@ -37,6 +37,7 @@ from mapie.utils import (
     _check_split_strategy,
     _check_verbose,
     _compute_quantiles,
+    _compute_quantiles_core,
     _fit_estimator,
     _prepare_params,
     _raise_error_if_fit_called_in_prefit_mode,
@@ -848,6 +849,53 @@ def test_compute_quantiles_2D_and_3D(alphas: NDArray):
     quantiles2 = _compute_quantiles(vector2, alphas)
 
     assert (quantiles1 == quantiles2).all()
+
+
+def test_compute_quantiles_core_flattened():
+    """Test that, without axis, the core helper computes the quantiles of
+    the flattened array at each level, like ``np.quantile``.
+    """
+    values = np.random.rand(100, 1)
+    levels = np.array([0.2, 0.5, 0.9])
+
+    quantiles = _compute_quantiles_core(values, levels, method="higher")
+
+    expected = np.stack(
+        [np.quantile(values, level, method="higher") for level in levels]
+    )
+    assert (quantiles == expected).all()
+
+
+def test_compute_quantiles_core_axis_nan_aware():
+    """Test that, with an axis, the core helper computes NaN-aware
+    quantiles along this axis, like ``np.nanquantile``.
+    """
+    values = np.random.rand(50, 4)
+    values[7, 2] = np.nan
+    levels = np.array([0.3, 0.8])
+
+    quantiles = _compute_quantiles_core(values, levels, method="lower", axis=0)
+
+    expected = np.stack(
+        [np.nanquantile(values, level, axis=0, method="lower") for level in levels]
+    )
+    assert (quantiles == expected).all()
+
+
+def test_compute_quantiles_core_infinite_mask():
+    """Test that the masked levels are set to infinity
+    and the other levels are left untouched.
+    """
+    values = np.random.rand(50, 1)
+    levels = np.array([0.5, 1.0])
+    infinite_mask = np.array([False, True])
+
+    quantiles = _compute_quantiles_core(
+        values, levels, method="lower", axis=0, infinite_mask=infinite_mask
+    )
+
+    assert quantiles[0, 0] == np.nanquantile(values, 0.5, axis=0, method="lower")
+    assert quantiles[1, 0] == np.inf
 
 
 @pytest.mark.parametrize("estimator", [-1, 3, 0.2])

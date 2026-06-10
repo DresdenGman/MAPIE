@@ -1,5 +1,8 @@
 # History
 
+## 1.x.x (2026-xx-xx)
+* Unify quantile computation between regression and classification: both `BaseConformityScore.get_quantile` and `mapie.utils._compute_quantiles` now delegate to a single shared helper, `mapie.utils._compute_quantiles_core`. The two entry points keep their existing (intentionally different) finite-sample corrections of the quantile level, so results are unchanged. (issue #479)
+
 ## 1.4.1 (2026-06-08)
 
 ### Features

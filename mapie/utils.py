@@ -4,7 +4,7 @@ import warnings
 from collections.abc import Iterable as IterableType
 from decimal import Decimal
 from math import isclose
-from typing import Any, Iterable, List, Optional, Tuple, Union, cast
+from typing import Any, Iterable, List, Literal, Optional, Tuple, Union, cast
 
 import numpy as np
 from numpy.typing import ArrayLike, NDArray
@@ -740,6 +740,59 @@ def _check_alpha_and_last_axis(vector: NDArray, alpha_np: NDArray):
         return vector, alpha_np
 
 
+def _compute_quantiles_core(
+    values: NDArray,
+    levels: NDArray,
+    method: Literal["lower", "higher"],
+    axis: Optional[int] = None,
+    infinite_mask: Optional[NDArray] = None,
+) -> NDArray:
+    """Compute the quantiles of ``values`` at each of the given levels.
+
+    This is the shared computation core behind both the classification
+    (``_compute_quantiles``) and the regression
+    (``BaseConformityScore.get_quantile``) quantile entry points.
+    The two entry points apply different finite-sample corrections to the
+    quantile levels (and use different NumPy quantile methods), which select
+    different order statistics for some ``(n, alpha)`` pairs; the corrected
+    levels are therefore computed by the callers and passed here.
+
+    Parameters
+    ----------
+    values: NDArray
+        Values from which the quantiles are computed.
+        NaN values are ignored.
+
+    levels: NDArray of shape (n_levels,)
+        Quantile levels, each between 0 and 1.
+
+    method: Literal["lower", "higher"]
+        Method passed to ``np.nanquantile``.
+
+    axis: Optional[int]
+        Axis along which the quantiles are computed. If ``None``, the
+        quantiles are computed over the flattened array.
+
+        By default ``None``.
+
+    infinite_mask: Optional[NDArray] of shape (n_levels,)
+        Boolean mask of the levels for which the quantile is replaced by
+        ``np.inf`` (used to produce unbounded prediction intervals).
+
+        By default ``None``.
+
+    Returns
+    -------
+    NDArray of shape (n_levels,) if ``axis`` is None,
+    otherwise (n_levels, values.shape[1 - axis])
+        Quantiles of the values at the given levels.
+    """
+    quantiles = np.nanquantile(values, levels, axis=axis, method=method)
+    if infinite_mask is not None and np.any(infinite_mask):
+        quantiles[infinite_mask] = np.inf
+    return cast(NDArray, quantiles)
+
+
 def _compute_quantiles(vector: NDArray, alpha: NDArray) -> NDArray:
     """Compute the desired quantiles of a vector.
 
@@ -759,17 +812,8 @@ def _compute_quantiles(vector: NDArray, alpha: NDArray) -> NDArray:
     """
     n = len(vector)
     if len(vector.shape) <= 2:
-        quantiles_ = np.stack(
-            [
-                np.quantile(
-                    vector,
-                    ((n + 1) * (1 - _alpha)) / n,
-                    method="higher",
-                )
-                for _alpha in alpha
-            ]
-        )
-
+        levels = ((n + 1) * (1 - np.asarray(alpha))) / n
+        quantiles_ = _compute_quantiles_core(vector, levels, method="higher")
     else:
         _check_alpha_and_last_axis(vector, alpha)
         quantiles_ = np.stack(

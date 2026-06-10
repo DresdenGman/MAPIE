@@ -1,10 +1,12 @@
 from abc import ABCMeta, abstractmethod
-from typing import Optional
+from typing import Optional, cast
 
 import numpy as np
 from sklearn.base import BaseEstimator
 
 from numpy.typing import NDArray
+
+from mapie.utils import _compute_quantiles_core
 
 
 class BaseConformityScore(metaclass=ABCMeta):
@@ -126,7 +128,6 @@ class BaseConformityScore(metaclass=ABCMeta):
         NDArray of shape (1, n_alpha) or (n_samples, n_alpha)
             The quantiles of the conformity scores.
         """
-        n_ref = conformity_scores.shape[1 - axis]
         n_calib: int = np.min(np.sum(~np.isnan(conformity_scores), axis=axis))
         signed = 1 - 2 * reversed
 
@@ -142,17 +143,17 @@ class BaseConformityScore(metaclass=ABCMeta):
         # the quantile is set to infinity.
         # Otherwise, the quantile is calculated as the corrected lower quantile
         # of the signed conformity scores.
-        quantile = signed * np.column_stack(
-            [
-                np.nanquantile(
-                    signed * conformity_scores, _alpha_cor, axis=axis, method="lower"
-                )
-                if not (unbounded and _alpha >= 1)
-                else np.inf * np.ones(n_ref)
-                for _alpha, _alpha_cor in zip(alpha_ref, alpha_cor)
-            ]
+        quantile = (
+            signed
+            * _compute_quantiles_core(
+                signed * conformity_scores,
+                alpha_cor,
+                method="lower",
+                axis=axis,
+                infinite_mask=np.logical_and(unbounded, alpha_ref >= 1),
+            ).T
         )
-        return quantile
+        return cast(NDArray, quantile)
 
     @abstractmethod
     def predict_set(self, X: NDArray, alpha_np: NDArray, **kwargs):
